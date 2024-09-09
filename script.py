@@ -5,6 +5,8 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
+from openpyxl import load_workbook
+from datetime import datetime
 from bs4 import BeautifulSoup
 import pandas as pd
 import time
@@ -57,7 +59,7 @@ try:
                     if (mutation.type === 'childList') {
                         mutation.addedNodes.forEach(node => {
                             if (node.nodeType === 1) {
-                                node.style.height = '0';
+                                node.style.height = '1px';
                             }
                         });
                     }
@@ -67,8 +69,7 @@ try:
             observer.observe(targetNode, config);
             const existingItems = targetNode.children;
             for (let i = 0; i < existingItems.length; i++) {
-                existingItems[i].style.height = '0';
-                existingItems[i].style.overflow = 'hidden';
+                existingItems[i].style.height = '1px';
             }
         """)
         time.sleep(10)
@@ -95,47 +96,84 @@ try:
     else:
         print("Элементы virtuoso-item-list не найдены.")
 
+    # Удаляем лишние пробелы в начале и конце текста и разбиваем текст на строки
     lines = formatted_text.strip().split("\n")
     data = []
+
     for line in lines:
-        line = line.strip().strip('/')
-        line = line.replace('\xa0', '')
+        line = line.strip().strip('/').replace('\xa0', '').replace('₽', '')
         line = re.sub(r'\s+', '', line)
-        if '(' in line:
-            left_part = line.split('(')[0]
-            percentage = line.split('(')[1].rstrip(')')
-        else:
-            left_part = line
-            percentage = ''
-        fields = [field.strip() for field in left_part.split('/') if field.strip()]
-        if percentage:
-            fields.append(percentage)
-        if len(fields) >= 4:
-            fields[2] = fields[2].rstrip('₽')
-        if len(fields) >= 5:
-            fields[3] = fields[3].rstrip('₽')
+        line = line[:line.rfind('/')]
+        fields = [field.strip() for field in line.split('/') if field.strip()]
         data.append(fields)
-        # print("Обрабатываемая строка:", line)
-        # print("Поля:", fields)
+    # print("Поля:", data)
 
-    # export данных в Excel
-    if data:
-        df = pd.DataFrame(data, columns=['Компания', 'Код', 'Цена', 'Изменение', 'Процент'])
-        output_file = 'output.xlsx'
+    # Экспорт данных в Excel
+    current_date = datetime.now().strftime('%d.%m.%Y')
+    df = pd.DataFrame(data, columns=['Компания', 'Код', current_date])
+    excel_file = 'Активы.xlsx'
 
-        if os.path.exists(output_file):
-            try:
-                with open(output_file, 'a'):
-                    pass
-            except PermissionError:
-                print("Закройте таблицу >:(")
+    if os.path.exists(excel_file):
+        try:
+            # Загружаем существующий файл Excel
+            workbook = load_workbook(excel_file)
+            sheet = workbook[workbook.sheetnames[0]]
+
+            # Получаем коды из первого столбца Excel
+            existing_codes = [cell.value for cell in sheet['B'][1:]]  # Из столбца Код
+            existing_companies = [cell.value for cell in sheet['A'][1:]]  # Из столбца Компания
+
+            # Создаем список для упорядоченных данных
+            ordered_data = []
+
+            # Упорядочиваем данные по кодам из Excel и добавляем нули для отсутствующих кодов
+            for code in existing_codes:
+                if code in df['Код'].values:
+                    # Если код найден в новом наборе данных, берем цену
+                    price = df.loc[df['Код'] == code, current_date].values[0]
+                else:
+                    # Если код отсутствует в новом наборе данных, присваиваем цену 0
+                    price = 0
+                ordered_data.append((code, price))
+
+            # Добавляем новые коды и компании, которые есть в df, но отсутствуют в Excel
+            new_codes = df[~df['Код'].isin(existing_codes)]
+            for _, row in new_codes.iterrows():
+                ordered_data.append((row['Код'], row[current_date]))
+                # Добавляем компанию, если её нет в существующих компаниях
+                if row['Компания'] not in existing_companies:
+                    sheet.append([row['Компания'], row['Код'], ''])  # Предварительно добавляем пустую цену
+
+            # Создаем новый DataFrame из упорядоченных данных
+            ordered_df = pd.DataFrame(ordered_data, columns=['Код', current_date])
+
+            # Проверяем, существует ли столбец с текущей датой
+            column_names = [cell.value for cell in sheet[1]]  # Заголовки из первой строки
+            if current_date not in column_names:
+                # Если столбца с сегодняшней датой нет, добавляем его
+                column_index = len(column_names) + 1
+                sheet.cell(row=1, column=column_index, value=current_date)
+
             else:
-                df.to_excel(output_file, index=False)
-                print("Данные успешно сохранены в файл output.xlsx.")
-        else:
-            df.to_excel(output_file, index=False)
-            print("Данные успешно сохранены в файл output.xlsx.")
+                # Если столбец существует, находим его индекс
+                column_index = column_names.index(current_date) + 1
+
+            # Вставляем упорядоченные цены в соответствующий столбец
+            for row_idx, (code, price) in enumerate(ordered_data, start=2):  # Начинаем со второй строки
+                sheet.cell(row=row_idx, column=column_index, value=price)
+
+            # Сохраняем изменения
+            workbook.save(excel_file)
+            print("Данные успешно обновлены в файле")
+
+        except PermissionError:
+            print("Закройте таблицу >:(")
+        except Exception as e:
+            print(f"Ошибка при чтении файла: {e}")
+
     else:
-        print("Нет данных для сохранения.")
+        # Если файла нет, создаем его
+        df.to_excel(excel_file, index=False)
+        print("Данные успешно сохранены в новый файл")
 finally:
     driver.quit()
