@@ -92,11 +92,9 @@ try:
                     structured_texts.append(text)
                 if structured_texts:
                     formatted_text += ' / '.join(structured_texts) + ' /\n'
-        #  print(formatted_text)
     else:
         print("Элементы virtuoso-item-list не найдены.")
 
-    # Удаляем лишние пробелы в начале и конце текста и разбиваем текст на строки
     lines = formatted_text.strip().split("\n")
     data = []
 
@@ -108,61 +106,46 @@ try:
         data.append(fields)
     # print("Поля:", data)
 
-    # Экспорт данных в Excel
     current_date = datetime.now().strftime('%d.%m.%Y')
     df = pd.DataFrame(data, columns=['Компания', 'Код', current_date])
     excel_file = 'Активы.xlsx'
 
     if os.path.exists(excel_file):
         try:
-            # Загружаем существующий файл Excel
             workbook = load_workbook(excel_file)
             sheet = workbook[workbook.sheetnames[0]]
 
-            # Получаем коды из первого столбца Excel
-            existing_codes = [cell.value for cell in sheet['B'][1:]]  # Из столбца Код
-            existing_companies = [cell.value for cell in sheet['A'][1:]]  # Из столбца Компания
+            existing_codes = [cell.value for cell in sheet['B'][1:]]
+            existing_companies = [cell.value for cell in sheet['A'][1:]]
 
-            # Создаем список для упорядоченных данных
             ordered_data = []
 
-            # Упорядочиваем данные по кодам из Excel и добавляем нули для отсутствующих кодов
             for code in existing_codes:
                 if code in df['Код'].values:
-                    # Если код найден в новом наборе данных, берем цену
                     price = df.loc[df['Код'] == code, current_date].values[0]
                 else:
-                    # Если код отсутствует в новом наборе данных, присваиваем цену 0
                     price = 0
                 ordered_data.append((code, price))
 
-            # Добавляем новые коды и компании, которые есть в df, но отсутствуют в Excel
             new_codes = df[~df['Код'].isin(existing_codes)]
             for _, row in new_codes.iterrows():
                 ordered_data.append((row['Код'], row[current_date]))
-                # Добавляем компанию, если её нет в существующих компаниях
                 if row['Компания'] not in existing_companies:
-                    sheet.append([row['Компания'], row['Код'], ''])  # Предварительно добавляем пустую цену
+                    sheet.append([row['Компания'], row['Код'], ''])
 
-            # Создаем новый DataFrame из упорядоченных данных
             ordered_df = pd.DataFrame(ordered_data, columns=['Код', current_date])
 
-            # Проверяем, существует ли столбец с текущей датой
-            column_names = [cell.value for cell in sheet[1]]  # Заголовки из первой строки
+            column_names = [cell.value for cell in sheet[1]]
             if current_date not in column_names:
-                # Если столбца с сегодняшней датой нет, добавляем его
                 column_index = len(column_names) + 1
                 sheet.cell(row=1, column=column_index, value=current_date)
 
             else:
-                # Если столбец существует, находим его индекс
                 column_index = column_names.index(current_date) + 1
 
-            # Вставляем упорядоченные цены в соответствующий столбец
-            for row_idx, (code, price) in enumerate(ordered_data, start=2):  # Начинаем со второй строки
+            for row_idx, (code, price) in enumerate(ordered_data, start=2):
                 sheet.cell(row=row_idx, column=column_index, value=price)
 
-            # Сохраняем изменения
             workbook.save(excel_file)
             print("Данные успешно обновлены в файле")
 
@@ -172,8 +155,8 @@ try:
             print(f"Ошибка при чтении файла: {e}")
 
     else:
-        # Если файла нет, создаем его
         df.to_excel(excel_file, index=False)
         print("Данные успешно сохранены в новый файл")
 finally:
+
     driver.quit()
