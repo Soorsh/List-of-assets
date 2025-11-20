@@ -7,7 +7,7 @@
 
 3. Не открывать Exel файл!!!
 
-(chromedriver v128.0.6613.86 уже идет в комплекте ссылка для самостоятельной установки https://storage.googleapis.com/chrome-for-testing-public/128.0.6613.86/win64/chromedriver-win64.zip)
+(chromedriver v128.0.6613.86 уже идет в комплекте, но вот ссылка для самостоятельной установки если кому потребуется https://storage.googleapis.com/chrome-for-testing-public/128.0.6613.86/win64/chromedriver-win64.zip)
 
 Ссылка на документацию по обновлению браузера: support.google.com/chrome/answer/95414?hl=ru&co=GENIE.Platform%3DDesktop
 
